@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  KIND_VERSION: "0.32.0"
+  KUBECTL_VERSION: "1.36.1"
+  HELM_VERSION: "4.3.0"
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: true
+          cache-dependency-path: demo/go.sum
+
+      - name: Install Helm (checksum verified)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          base="https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+          curl --fail --location --silent --show-error --retry 3 --retry-delay 2 -o "${tmp}/helm.tgz" "${base}"
+          curl --fail --location --silent --show-error --retry 3 --retry-delay 2 -o "${tmp}/helm.sha256" "${base}.sha256sum"
+          printf '%s  %s\n' "$(cut -d' ' -f1 "${tmp}/helm.sha256")" "${tmp}/helm.tgz" | sha256sum --check --strict
+          tar -xzf "${tmp}/helm.tgz" -C "${tmp}"
+          sudo install -m 0755 "${tmp}/linux-amd64/helm" /usr/local/bin/helm
+          helm version --short
+
+      - name: gofmt
+        run: make fmt-check
+
+      - name: go vet
+        working-directory: demo
+        run: go vet ./...
+
+      - name: go test
+        working-directory: demo
+        run: go test ./...
+
+      - name: docker build
+        run: docker build --tag k8s-observability-blueprint/demo-service:0.1.0 demo
+
+      - name: helm lint and template
+        run: make helm-lint
+
+      - name: bash -n
+        run: bash -n scripts/*.sh
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-24.04
+    needs: quality
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: true
+          cache-dependency-path: demo/go.sum
+
+      - name: Install kind, kubectl and Helm (checksums verified)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          fetch() {
+            curl --fail --location --silent --show-error --retry 3 --retry-delay 2 -o "$1" "$2"
+          }
+
+          fetch "${tmp}/kind" "https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64"
+          fetch "${tmp}/kind.sha256" "https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64.sha256sum"
+          printf '%s  %s\n' "$(cut -d' ' -f1 "${tmp}/kind.sha256")" "${tmp}/kind" | sha256sum --check --strict
+
+          fetch "${tmp}/kubectl" "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          fetch "${tmp}/kubectl.sha256" "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"
+          printf '%s  %s\n' "$(cat "${tmp}/kubectl.sha256")" "${tmp}/kubectl" | sha256sum --check --strict
+
+          fetch "${tmp}/helm.tgz" "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+          fetch "${tmp}/helm.sha256" "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz.sha256sum"
+          printf '%s  %s\n' "$(cut -d' ' -f1 "${tmp}/helm.sha256")" "${tmp}/helm.tgz" | sha256sum --check --strict
+          tar -xzf "${tmp}/helm.tgz" -C "${tmp}"
+
+          sudo install -m 0755 "${tmp}/kind" /usr/local/bin/kind
+          sudo install -m 0755 "${tmp}/kubectl" /usr/local/bin/kubectl
+          sudo install -m 0755 "${tmp}/linux-amd64/helm" /usr/local/bin/helm
+          kind version
+          kubectl version --client
+          helm version --short
+
+      - name: make up
+        run: make up
+
+      - name: make test-e2e
+        run: make test-e2e
+
+      - name: Failure diagnostics
+        if: failure()
+        run: |
+          set +e
+          k() { kubectl --context kind-k8s-observability-blueprint "$@"; }
+          k get pods -A -o wide
+          k get svc -A
+          k get servicemonitor -A
+          k get events -A --sort-by=.lastTimestamp
+          printf '\n===== demo-service =====\n'
+          k -n demo logs deployment/demo-service --all-containers --tail=200 --previous
+          k -n demo logs deployment/demo-service --all-containers --tail=200
+          printf '\n===== otel-collector =====\n'
+          k -n observability logs deployment/otel-collector --all-containers --tail=200
+          printf '\n===== tempo =====\n'
+          k -n observability logs statefulset/tempo --all-containers --tail=200
+          printf '\n===== prometheus =====\n'
+          k -n observability logs statefulset/prometheus-monitoring-kube-prometheus-prometheus -c prometheus --tail=200
+
+      - name: make down
+        if: always()
+        run: make down
