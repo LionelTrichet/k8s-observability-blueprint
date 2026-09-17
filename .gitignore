@@ -1,0 +1,17 @@
+# Go
+demo/demo-service
+demo/server
+*.test
+*.out
+coverage.*
+
+# Local tooling
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Never commit credentials or kubeconfigs
+*.kubeconfig
+kubeconfig*
+.env
