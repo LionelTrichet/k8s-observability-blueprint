@@ -1,0 +1,62 @@
+# kube-prometheus-stack 89.2.0 — Prometheus Operator, Prometheus, Grafana and
+# kube-state-metrics only.
+
+alertmanager:
+  enabled: false
+
+defaultRules:
+  create: false
+
+prometheus-node-exporter:
+  enabled: false
+
+nodeExporter:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    scrapeInterval: 5s
+    retention: 2h
+    # Discover ServiceMonitors in every namespace without requiring the Helm
+    # release label.
+    #
+    # The chart template falls back to `matchLabels: {release: monitoring}`
+    # when serviceMonitorSelector is empty and NilUsesHelmValues is true, so
+    # NilUsesHelmValues is disabled and the selector renders as `{}`.
+    #
+    # `matchLabels: null` is deliberately not used: Helm 4 installs with
+    # server-side apply, and the Prometheus CRD schema rejects it with
+    # "spec.serviceMonitorSelector.matchLabels must be of type object".
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+
+kube-state-metrics:
+  enabled: true
+
+grafana:
+  enabled: true
+  # No adminPassword here: the Grafana chart generates one into a Secret.
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
+  additionalDataSources:
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      access: proxy
+      url: http://tempo.observability.svc.cluster.local:3200
+      isDefault: false
