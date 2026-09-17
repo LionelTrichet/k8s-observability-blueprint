@@ -1,0 +1,88 @@
+# OpenTelemetry Collector chart 0.173.1: trace gateway only.
+
+mode: deployment
+replicaCount: 1
+
+fullnameOverride: otel-collector
+
+# The chart has no default image repository and refuses to render without one.
+# The tag is intentionally not set: the pinned chart appVersion selects it.
+image:
+  repository: otel/opentelemetry-collector-k8s
+
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false
+
+ports:
+  otlp:
+    enabled: true
+  otlp-http:
+    enabled: false
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+  metrics:
+    enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# alternateConfig, not config: the chart deep-merges `config` into its
+# defaults, which keeps the default logs and metrics pipelines, the debug
+# exporter and the jaeger, zipkin and prometheus receivers active, and merges
+# limit_percentage into memory_limiter next to limit_mib. alternateConfig
+# replaces the whole configuration.
+#
+# health_check is required: the chart's liveness and readiness probes call it.
+#
+# The chart renders the `otlp` exporter under its current component name
+# `otlp_grpc`; the rendered pipeline exports to `otlp_grpc/tempo`.
+alternateConfig:
+  extensions:
+    health_check:
+      endpoint: ${env:MY_POD_IP}:13133
+
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+  processors:
+    memory_limiter:
+      check_interval: 1s
+      limit_mib: 128
+      spike_limit_mib: 32
+
+    batch:
+      timeout: 1s
+
+  exporters:
+    otlp/tempo:
+      endpoint: tempo.observability.svc.cluster.local:4317
+      tls:
+        insecure: true
+
+  service:
+    extensions:
+      - health_check
+    pipelines:
+      traces:
+        receivers:
+          - otlp
+        processors:
+          - memory_limiter
+          - batch
+        exporters:
+          - otlp/tempo

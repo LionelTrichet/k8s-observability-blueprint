@@ -1,0 +1,27 @@
+# Tempo chart 2.3.0 (Tempo 2.10.8): single binary, ephemeral local storage.
+
+replicas: 1
+
+tempo:
+  reportingEnabled: false
+
+  retention: 1h
+
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          # Bind explicitly. Receiver defaults may listen on localhost only,
+          # which would reject the Collector running in another pod.
+          endpoint: "0.0.0.0:4317"
+
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+
+persistence:
+  enabled: false
