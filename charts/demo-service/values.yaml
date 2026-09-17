@@ -1,0 +1,10 @@
+image:
+  repository: k8s-observability-blueprint/demo-service
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+otel:
+  endpoint: otel-collector.observability.svc.cluster.local:4317
+
+serviceMonitor:
+  interval: 5s

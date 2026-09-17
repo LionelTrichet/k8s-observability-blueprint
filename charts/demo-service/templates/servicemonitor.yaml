@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "demo-service.name" . }}
+  labels:
+    # Intentionally no Helm `release` label: Prometheus is configured with an
+    # unrestricted ServiceMonitor selector.
+    {{- include "demo-service.labels" . | nindent 4 }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - demo
+  selector:
+    matchLabels:
+      {{- include "demo-service.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.serviceMonitor.interval }}

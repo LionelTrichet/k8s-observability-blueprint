@@ -1,0 +1,6 @@
+apiVersion: v2
+type: application
+name: demo-service
+description: Instrumented demo workload for Kubernetes Observability Blueprint.
+version: 0.1.0
+appVersion: "0.1.0"
