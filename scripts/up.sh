@@ -72,6 +72,7 @@ helm upgrade --install demo-service "${REPO_ROOT}/charts/demo-service" \
 	--kube-context "${KUBE_CONTEXT}" \
 	--namespace "${DEMO_NS}" \
 	--values "${REPO_ROOT}/charts/demo-service/values.yaml" \
+	--set-string "image.tag=${DEMO_VERSION}" \
 	--wait \
 	--timeout 2m
 # A rebuilt image with the same tag is not picked up by a no-op upgrade.
