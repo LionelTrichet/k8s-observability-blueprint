@@ -43,31 +43,40 @@ kc() {
 PORT_FORWARD_PIDS=()
 PORT_FORWARD_LOGS=()
 
-# wait_tcp PORT TIMEOUT_SECONDS
-wait_tcp() {
-	local port="$1" timeout="$2" waited=0
-	until (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; do
-		if ((waited >= timeout)); then
-			return 1
-		fi
-		sleep 1
-		waited=$((waited + 1))
-	done
-}
-
 # start_port_forward NAMESPACE RESOURCE LOCAL_PORT REMOTE_PORT
 # Always binds 127.0.0.1.
 start_port_forward() {
 	local namespace="$1" resource="$2" local_port="$3" remote_port="$4" log_file
 	log_file="$(mktemp)"
-	kc -n "${namespace}" port-forward --address 127.0.0.1 \
+
+	# Call kubectl directly: through kc, $! would be a subshell and killing it
+	# would leave kubectl running and holding the local port.
+	kubectl --context "${KUBE_CONTEXT}" -n "${namespace}" port-forward --address 127.0.0.1 \
 		"${resource}" "${local_port}:${remote_port}" >"${log_file}" 2>&1 &
-	PORT_FORWARD_PIDS+=("$!")
+
+	local pid=$! elapsed=0
+
+	PORT_FORWARD_PIDS+=("${pid}")
 	PORT_FORWARD_LOGS+=("${log_file}")
-	if ! wait_tcp "${local_port}" 30; then
-		cat "${log_file}" >&2
-		fail "port-forward ${namespace}/${resource} -> 127.0.0.1:${local_port} did not open"
-	fi
+
+	while ((elapsed < 30)); do
+		if grep -Fq "Forwarding from 127.0.0.1:${local_port} -> ${remote_port}" "${log_file}"; then
+			if kill -0 "${pid}" 2>/dev/null &&
+				(exec 3<>"/dev/tcp/127.0.0.1/${local_port}") 2>/dev/null; then
+				return 0
+			fi
+		fi
+
+		if ! kill -0 "${pid}" 2>/dev/null; then
+			break
+		fi
+
+		sleep 1
+		elapsed=$((elapsed + 1))
+	done
+
+	cat "${log_file}" >&2
+	fail "port-forward ${namespace}/${resource} -> 127.0.0.1:${local_port} did not open"
 }
 
 stop_port_forwards() {
