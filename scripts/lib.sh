@@ -60,7 +60,9 @@ start_port_forward() {
 	PORT_FORWARD_LOGS+=("${log_file}")
 
 	while ((elapsed < 30)); do
-		if grep -Fq "Forwarding from 127.0.0.1:${local_port} -> ${remote_port}" "${log_file}"; then
+		# For a Service, kubectl reports the container target port, which can
+		# differ from REMOTE_PORT (Grafana: 80 -> 3000), so match only the local side.
+		if grep -Fq "Forwarding from 127.0.0.1:${local_port} -> " "${log_file}"; then
 			if kill -0 "${pid}" 2>/dev/null &&
 				(exec 3<>"/dev/tcp/127.0.0.1/${local_port}") 2>/dev/null; then
 				return 0
