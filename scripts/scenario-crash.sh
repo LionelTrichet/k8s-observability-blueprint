@@ -11,7 +11,9 @@ cleanup() {
 	stop_port_forwards
 	rm -rf "${work_dir}"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 kc -n "${DEMO_NS}" rollout status deployment/demo-service --timeout=120s
 before="$(demo_restart_count)"

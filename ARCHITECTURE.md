@@ -134,7 +134,7 @@ Scenarios are deterministic, bounded and re-runnable.
 - Metric assertions poll the Prometheus HTTP API for a numeric value `>= threshold`. The latency assertion uses the cumulative histogram, not `rate()`, so it does not depend on scrape windows.
 - Trace assertions fetch one trace by the ID returned in the response and search attributes recursively with `jq`, independent of the exact OTLP JSON shape.
 - The restart count is read from the container status whose `name` is `demo-service`, never from `containerStatuses[0]`.
-- Every scenario installs `trap cleanup EXIT INT TERM` and stops its port forwards.
+- Every scenario uses an `EXIT` trap for port-forward cleanup and separate `INT`/`TERM` handlers that terminate execution.
 
 ## Local vs CI
 

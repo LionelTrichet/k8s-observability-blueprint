@@ -10,7 +10,9 @@ cleanup() {
 	stop_port_forwards
 	rm -rf "${work_dir}"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 start_demo_port_forward
 start_prometheus_port_forward
