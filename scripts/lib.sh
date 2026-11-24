@@ -172,8 +172,11 @@ prometheus_query() {
 		jq -r '.data.result[0].value[1] // empty'
 }
 
-# float_ge A B — succeeds when A >= B.
+# float_ge A B — compare numeric strings only.
 float_ge() {
+	local number='^-?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$'
+	[[ "$1" =~ ${number} && "$2" =~ ${number} ]] || return 1
+
 	awk -v a="$1" -v b="$2" 'BEGIN { exit !(a + 0 >= b + 0) }'
 }
 
