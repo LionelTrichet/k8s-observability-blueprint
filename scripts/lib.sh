@@ -163,13 +163,25 @@ wait_http() {
 	done
 }
 
-# prometheus_query PROMQL — prints the first sample value, or nothing.
+# prometheus_query PROMQL — expects a single instant-vector series.
+# An empty vector prints nothing; API errors and ambiguous vectors fail.
 prometheus_query() {
 	local query="$1"
-	curl --silent --fail --max-time 5 \
+
+	curl --silent --show-error --fail --max-time 5 \
 		--get --data-urlencode "query=${query}" \
 		"http://127.0.0.1:${PORT_PROMETHEUS}/api/v1/query" |
-		jq -r '.data.result[0].value[1] // empty'
+		jq -r '
+			if .status != "success" then
+				error(.error // "Prometheus query failed")
+			elif .data.resultType != "vector" then
+				error("expected an instant vector")
+			elif (.data.result | length) > 1 then
+				error("query returned multiple series")
+			else
+				.data.result[0].value[1] // empty
+			end
+		'
 }
 
 # float_ge A B — compare numeric strings only.
