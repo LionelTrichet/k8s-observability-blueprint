@@ -131,7 +131,7 @@ Scenarios are deterministic, bounded and re-runnable.
 
 - Readiness uses `helm --wait`, `kubectl rollout status`, `kubectl wait` and HTTP polling with 1-second intervals. No fixed long sleeps.
 - Services are resolved by stable labels; port forwards target Services, not pod names.
-- Metric assertions poll the Prometheus HTTP API for a numeric value `>= threshold`. The latency assertion uses the cumulative histogram, not `rate()`, so it does not depend on scrape windows.
+- Readiness checks use thresholds; scenario checks compare fresh Prometheus samples against a baseline collected before each request. The latency assertion uses the cumulative histogram, not `rate()`, so it does not depend on scrape windows.
 - Trace assertions fetch one trace by the ID returned in the response and search attributes recursively with `jq`, independent of the exact OTLP JSON shape.
 - The restart count is read from the container status whose `name` is `demo-service`, never from `containerStatuses[0]`.
 - Every scenario uses an `EXIT` trap for port-forward cleanup and separate `INT`/`TERM` handlers that terminate execution.

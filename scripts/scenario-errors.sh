@@ -20,12 +20,14 @@ start_tempo_port_forward
 
 log "Error request"
 body="${work_dir}/error.json"
+error_metric='sum(demo_http_requests_total{route="/error",status="500"}) or vector(0)'
+errors_before="$(prometheus_query "${error_metric}")"
 demo_request /error 500 "${body}" >/dev/null
 trace_id="$(extract_trace_id "${body}")"
 pass "GET /error -> 500, traceId ${trace_id}"
 
 log "Error metric"
-value="$(wait_prometheus_value 'sum(demo_http_requests_total{route="/error",status="500"})' 1 30)"
+value="$(wait_prometheus_increase "${error_metric}" "${errors_before}" 30)"
 pass "demo_http_requests_total{route=\"/error\",status=\"500\"} = ${value}"
 
 log "Error trace"

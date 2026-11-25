@@ -192,6 +192,32 @@ float_ge() {
 	awk -v a="$1" -v b="$2" 'BEGIN { exit !(a + 0 >= b + 0) }'
 }
 
+# float_gt A B — succeeds only when both values are valid and A > B.
+float_gt() {
+	float_ge "$1" "$2" && ! float_ge "$2" "$1"
+}
+
+# wait_prometheus_increase PROMQL BASELINE TIMEOUT_SECONDS
+wait_prometheus_increase() {
+	local query="$1" baseline="$2" timeout="$3" waited=0 value=""
+
+	while true; do
+		value="$(prometheus_query "${query}" || true)"
+
+		if [[ -n "${value}" ]] && float_gt "${value}" "${baseline}"; then
+			printf '%s\n' "${value}"
+			return 0
+		fi
+
+		if ((waited >= timeout)); then
+			fail "Prometheus counter did not increase from ${baseline} in ${timeout}s (last: '${value}'): ${query}"
+		fi
+
+		sleep 1
+		waited=$((waited + 1))
+	done
+}
+
 # wait_prometheus_value PROMQL THRESHOLD TIMEOUT_SECONDS
 # Polls until the query returns a numeric value >= THRESHOLD and prints it.
 wait_prometheus_value() {

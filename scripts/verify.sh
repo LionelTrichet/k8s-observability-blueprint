@@ -68,12 +68,14 @@ pass 'up{namespace="demo"} == 1'
 
 log "Baseline request"
 body="${work_dir}/work.json"
+request_metric='sum(demo_http_requests_total{route="/work",status="200"}) or vector(0)'
+requests_before="$(prometheus_query "${request_metric}")"
 demo_request /work 200 "${body}" >/dev/null
 trace_id="$(extract_trace_id "${body}")"
 pass "GET /work -> 200, traceId ${trace_id}"
 
 log "Baseline metric"
-value="$(wait_prometheus_value 'sum(demo_http_requests_total{route="/work",status="200"})' 1 30)"
+value="$(wait_prometheus_increase "${request_metric}" "${requests_before}" 30)"
 pass "demo_http_requests_total{route=\"/work\",status=\"200\"} = ${value}"
 
 log "Baseline trace"
