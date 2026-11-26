@@ -113,8 +113,27 @@ for _ in $(seq 1 60); do
 done
 jq -e '.dashboard.title == "Kubernetes Observability Blueprint"' <<<"${dashboard}" >/dev/null ||
 	fail "Grafana dashboard k8s-observability-blueprint was not provisioned"
-panels="$(jq '.dashboard.panels | length' <<<"${dashboard}")"
-[[ "${panels}" == "4" ]] || fail "dashboard has ${panels} panels, expected 4"
-pass "Grafana has Prometheus and Tempo datasources and the 4-panel dashboard"
+jq -e '
+	.dashboard.panels as $panels |
+	($panels | length) == 4 and
+
+	([ $panels[] | select(.id == 1) | .targets[]?.expr
+	   | contains("demo_http_requests_total")
+	     and contains("rate(") ] | any) and
+
+	([ $panels[] | select(.id == 2) | .targets[]?.expr
+	   | contains("demo_http_requests_total")
+	     and contains("status=~") ] | any) and
+
+	([ $panels[] | select(.id == 3) | .targets[]?.expr
+	   | contains("demo_http_request_duration_seconds_bucket")
+	     and contains("histogram_quantile") ] | any) and
+
+	([ $panels[] | select(.id == 4) | .targets[]?.expr
+	   | contains("kube_pod_container_status_restarts_total") ] | any)
+' <<<"${dashboard}" >/dev/null ||
+	fail "dashboard panels or PromQL expressions do not match the demo metrics"
+
+pass "Grafana has Prometheus and Tempo datasources and the 4 expected metric panels"
 
 pass "baseline verification complete"
