@@ -123,17 +123,17 @@ Sleeping and exiting are injected as functions, so unit tests exercise `/slow` a
 | Baseline | `GET /work` | counter `>= 1`, exact trace with `scenario=baseline` |
 | Error | `GET /error` | `500` counter `>= 1`, exact trace with `scenario=error` and status 500 |
 | Latency | `GET /slow` | request `>= 0.70 s` and `< 3 s`, new histogram sum/count average `>= 0.70`, exact trace |
-| Crash | `GET /crash` | `restartCount` increases, pod Ready, restart metric `>= 1` |
+| Crash | `GET /crash` | targeted Pod restart count increases, pod Ready, matching restart metric reaches the new count |
 
 Scenarios are deterministic, bounded and re-runnable.
 
 ## Verification Strategy
 
 - Readiness uses `helm --wait`, `kubectl rollout status`, `kubectl wait` and HTTP polling with 1-second intervals. No fixed long sleeps.
-- Services are resolved by stable labels; port forwards target Services, not pod names.
+- Services are resolved by stable labels; regular port forwards target Services, not pod names. The crash scenario is the exception: it forwards to one specific demo Pod, so `/crash` reaches the Pod whose restarts are checked.
 - Readiness checks use thresholds; scenario checks compare fresh Prometheus samples against a baseline collected before each request. The latency scenario uses histogram sum/count deltas instead of `rate()`.
 - Trace assertions fetch one trace by the ID returned in the response and search attributes recursively with `jq`, independent of the exact OTLP JSON shape.
-- The restart count is read from the container status whose `name` is `demo-service`, never from `containerStatuses[0]`.
+- The crash scenario targets one specific demo Pod and compares that container's restart count with the matching kube-state-metrics series. The count is read from the container status whose `name` is `demo-service`, never from `containerStatuses[0]`.
 - Every scenario uses an `EXIT` trap for port-forward cleanup and separate `INT`/`TERM` handlers that terminate execution.
 
 ## Local vs CI

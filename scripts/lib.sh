@@ -303,11 +303,18 @@ extract_trace_id() {
 	printf '%s\n' "${trace_id}"
 }
 
-# demo_restart_count — restartCount of the container named demo-service.
+# demo_restart_count POD — restartCount of demo-service in one named pod.
 # Never assumes containerStatuses[0].
 demo_restart_count() {
-	kc -n "${DEMO_NS}" get pods -l app.kubernetes.io/name=demo-service -o json |
-		jq -r '[ .items[].status.containerStatuses[]? | select(.name == "demo-service") | .restartCount ] | max // 0'
+	kc -n "${DEMO_NS}" get pod "$1" -o json |
+		jq -er '
+			[.status.containerStatuses[]?
+			 | select(.name == "demo-service")
+			 | .restartCount]
+			| if length == 1 then .[0]
+			  else error("demo-service container status missing")
+			  end
+		'
 }
 
 # ---------------------------------------------------------------------------
