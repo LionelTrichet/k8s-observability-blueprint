@@ -30,7 +30,7 @@ func main() {
 	}
 }
 
-func run(logger *slog.Logger) error {
+func run(logger *slog.Logger) (runErr error) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
@@ -40,6 +40,27 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("initialize tracing: %w", err)
 	}
+
+	// Always flush telemetry, including when HTTP shutdown or serving fails.
+	// Give the exporter its own deadline rather than reusing HTTP's deadline.
+	defer func() {
+		flushCtx, cancel := context.WithTimeout(
+			context.Background(),
+			shutdownTimeout,
+		)
+		defer cancel()
+
+		if err := provider.Shutdown(flushCtx); err != nil {
+			runErr = errors.Join(
+				runErr,
+				fmt.Errorf("shutdown tracer provider: %w", err),
+			)
+		}
+
+		if runErr == nil {
+			logger.Info("stopped")
+		}
+	}()
 
 	application := app.New(provider.Tracer(tracing.TracerName), metrics.New(), time.Sleep, os.Exit)
 
@@ -60,11 +81,6 @@ func run(logger *slog.Logger) error {
 
 	select {
 	case err := <-serveErr:
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-		if shutdownErr := provider.Shutdown(shutdownCtx); shutdownErr != nil {
-			logger.Error("shutdown tracer provider", "error", shutdownErr)
-		}
 		return fmt.Errorf("serve HTTP: %w", err)
 	case <-ctx.Done():
 		logger.Info("shutdown signal received")
@@ -73,17 +89,13 @@ func run(logger *slog.Logger) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	// Order: stop accepting and drain HTTP first, then flush traces.
+	// Stop accepting and drain HTTP first; the deferred flush sends traces last.
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("shutdown HTTP server: %w", err)
 	}
 	if err := <-serveErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("serve HTTP: %w", err)
 	}
-	if err := provider.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("shutdown tracer provider: %w", err)
-	}
 
-	logger.Info("stopped")
 	return nil
 }
